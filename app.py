@@ -1,7 +1,5 @@
 import os
 import streamlit as st
-
-# ✅ Use in-memory Chroma, no disk path
 import chromadb
 from chromadb.config import Settings
 
@@ -13,19 +11,14 @@ from langchain.memory import ConversationBufferMemory
 from sentence_transformers import SentenceTransformer, util
 from PyPDF2 import PdfReader
 
-# ----------------------------------------------------------------------
-# ✅ Configuration
-# ----------------------------------------------------------------------
-PDF_FILE_PATH = "resume.pdf"  # or rename to your PDF
-GROQ_API_KEY = "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"
+PDF_FILE_PATH = "resume.pdf"  # or your PDF name
+GROQ_API_KEY = "YOUR_GROQ_API_KEY"
 
-# ----------------------------------------------------------------------
-# ✅ In-Memory Chroma (DuckDB + no persist directory)
-# ----------------------------------------------------------------------
+# ✅ In-memory Chroma
 chroma_client = chromadb.Client(
     Settings(
         chroma_db_impl="duckdb+parquet",
-        persist_directory=None  # None => purely in-memory
+        persist_directory=None
     )
 )
 try:
@@ -33,17 +26,11 @@ try:
 except chromadb.errors.InvalidCollectionException:
     collection = chroma_client.create_collection("ai_knowledge_base")
 
-# ----------------------------------------------------------------------
-# ✅ Embeddings & Models
-# ----------------------------------------------------------------------
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
 chat = ChatGroq(temperature=0.7, model_name="llama3-70b-8192", groq_api_key=GROQ_API_KEY)
 memory = ConversationBufferMemory(return_messages=True)
 
-# ----------------------------------------------------------------------
-# ✅ PDF Loading & Chunking
-# ----------------------------------------------------------------------
 def extract_text_from_pdf(pdf_path):
     text = ""
     try:
@@ -57,7 +44,6 @@ def extract_text_from_pdf(pdf_path):
 def chunk_and_upsert(document_text, chunk_size=200, chunk_overlap=50, batch_size=10):
     splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     chunks = splitter.split_text(document_text)
-
     existing_docs = set(collection.get().get("documents", []))
     new_chunks = [c for c in chunks if c not in existing_docs]
 
@@ -72,9 +58,6 @@ def chunk_and_upsert(document_text, chunk_size=200, chunk_overlap=50, batch_size
         )
     return len(new_chunks)
 
-# ----------------------------------------------------------------------
-# ✅ Retrieval & Similarity
-# ----------------------------------------------------------------------
 def retrieve_context(query, top_k=1):
     query_embedding = embedding_model.embed_query(query)
     results = collection.query(query_embeddings=[query_embedding], n_results=top_k)
@@ -85,15 +68,11 @@ def evaluate_response(user_query, bot_response, context):
     ctx_embed  = semantic_model.encode(context, convert_to_tensor=True)
     return util.pytorch_cos_sim(resp_embed, ctx_embed)[0][0].item()
 
-# ----------------------------------------------------------------------
-# ✅ Chatbot Logic
-# ----------------------------------------------------------------------
 def query_llama3(user_query):
     system_prompt = """
 System Prompt: You are a helpful AI assistant with knowledge from a PDF. 
 Respond as a human, never reveal AI nature, and use short or detailed answers as needed.
 """
-
     retrieved_context = retrieve_context(user_query)
     combined_context = f"Context from PDF: {retrieved_context}"
 
@@ -108,13 +87,9 @@ Respond as a human, never reveal AI nature, and use short or detailed answers as
     except Exception as e:
         return f"⚠️ Error: {str(e)}"
 
-# ----------------------------------------------------------------------
-# ✅ Streamlit UI
-# ----------------------------------------------------------------------
 st.set_page_config(page_title="AI Chatbot", layout="wide")
 st.title("🤖 AI Chatbot")
 
-# 1. Initialize DB once
 if "db_initialized" not in st.session_state:
     st.session_state["db_initialized"] = False
 
@@ -123,21 +98,19 @@ if not st.session_state["db_initialized"]:
         pdf_text = extract_text_from_pdf(PDF_FILE_PATH)
         if pdf_text.strip():
             num_chunks = chunk_and_upsert(pdf_text)
-            st.info(f"✅ {num_chunks} new chunks added to ChromaDB (in-memory)!")
+            st.info(f"✅ {num_chunks} chunks added!")
         else:
-            st.warning("⚠ No text found in PDF!")
+            st.warning("⚠ No text found in the PDF!")
     else:
         st.warning(f"⚠ PDF not found: {PDF_FILE_PATH}")
     st.session_state["db_initialized"] = True
 
-# 2. Display conversation
 for msg in memory.chat_memory.messages:
     if msg.type == "human":
         st.chat_message("user").write(msg.content)
     else:
         st.chat_message("assistant").write(msg.content)
 
-# 3. Chat input
 user_input = st.chat_input("Ask me anything...")
 
 if user_input:
