@@ -17,7 +17,7 @@ import numpy as np
 # ✅ Configuration
 # ----------------------------------------------------------------------
 PDF_FILE_PATH = "resume.pdf"  # Place your PDF in the same folder or provide full path
-GROQ_API_KEY = "YOUR_GROQ_API_KEY"  # Replace with your Groq API key
+GROQ_API_KEY = "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"  # Replace with your Groq API key
 
 # ----------------------------------------------------------------------
 # ✅ Initialize In-Memory ChromaDB (no disk path)
