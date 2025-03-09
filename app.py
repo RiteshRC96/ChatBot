@@ -12,7 +12,7 @@ from sentence_transformers import SentenceTransformer, util
 from PyPDF2 import PdfReader
 
 PDF_FILE_PATH = "resume.pdf"  # or your PDF name
-GROQ_API_KEY = "YOUR_GROQ_API_KEY"
+GROQ_API_KEY = "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"
 
 # ✅ In-memory Chroma
 chroma_client = chromadb.Client(
