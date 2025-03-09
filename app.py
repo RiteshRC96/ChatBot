@@ -25,7 +25,7 @@ from langchain.memory import ConversationBufferMemory
 
 from sentence_transformers import SentenceTransformer, util
 
-chroma_client = chromadb.PersistentClient(path="./chroma_db_4")
+chroma_client = chromadb.PersistentClient(path="chroma_db_4")
 try:
     collection = chroma_client.get_collection(name="ai_knowledge_base")
 except chromadb.errors.InvalidCollectionException:
@@ -82,7 +82,7 @@ if _name_ == "_main_":
 # ✅ Initialize Embeddings & ChromaDB
 # ----------------------------------------------------------------------
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-chroma_client = chromadb.PersistentClient(path="./chroma_db_4")
+chroma_client = chromadb.PersistentClient(path="chroma_db_4")
 collection = chroma_client.get_or_create_collection(name="ai_knowledge_base")
 
 # ----------------------------------------------------------------------
