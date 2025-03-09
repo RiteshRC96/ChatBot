@@ -8,7 +8,6 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain.schema import HumanMessage, SystemMessage
 from langchain.memory import ConversationBufferMemory
-
 from sentence_transformers import SentenceTransformer, util
 from PyPDF2 import PdfReader
 import numpy as np
@@ -16,18 +15,19 @@ import numpy as np
 # ----------------------------------------------------------------------
 # ✅ Configuration
 # ----------------------------------------------------------------------
-PDF_FILE_PATH = "resume.pdf"  # Place your PDF in the same folder or provide full path
-GROQ_API_KEY = "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"  # Replace with your Groq API key
+PDF_FILE_PATH = "resume.pdf"  # Place your PDF here or change the path
+GROQ_API_KEY = "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"  # Replace with your actual key
 
 # ----------------------------------------------------------------------
-# ✅ Initialize In-Memory ChromaDB (no disk path)
+# ✅ Use In-Memory Chroma to Avoid SQLite Version Issues
 # ----------------------------------------------------------------------
 chroma_client = chromadb.Client(
     Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory=None  # None or "" uses in-memory mode
+        chroma_db_impl="duckdb+parquet",  # uses DuckDB
+        persist_directory=None            # None = in-memory
     )
 )
+
 # Create or get the collection
 try:
     collection = chroma_client.get_collection(name="ai_knowledge_base")
@@ -60,10 +60,11 @@ def chunk_and_upsert(document_text, chunk_size=200, chunk_overlap=50, batch_size
     splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     chunks = splitter.split_text(document_text)
 
+    # Check existing docs to avoid duplicates
     existing_docs = set(collection.get().get("documents", []))
+    new_chunks = [c for c in chunks if c not in existing_docs]
 
-    # Only upsert new chunks
-    new_chunks = [chunk for chunk in chunks if chunk not in existing_docs]
+    # Upsert in batches
     for i in range(0, len(new_chunks), batch_size):
         batch = new_chunks[i : i + batch_size]
         embeddings = [embedding_model.embed_query(chunk) for chunk in batch]
@@ -93,42 +94,41 @@ def evaluate_response(user_query, bot_response, context):
 # ----------------------------------------------------------------------
 def query_llama3(user_query):
     system_prompt = """
-System Prompt: You are an AI clone of Nandesh Kalashetti, a B.Tech student with a strong background in Full-Stack Development and advanced problem-solving skills.
+System Prompt: You are an AI clone of Ritesh or Nandesh (customize as needed). 
+You have a strong background in software development, cloud computing, and AI.
 
 Instructions:
-1. Use a friendly human tone.
-2. Keep answers concise for simple queries, or elaborate for complex queries.
-3. Never reveal you are an AI model—always assume you are Nandesh.
-4. Insert relevant emojis for short answers.
-5. Provide structured details for complex queries referencing the PDF info.
+1. Respond in a human-like tone.
+2. Keep answers concise for simple queries, elaborate for complex ones.
+3. Never reveal you are an AI—assume you are a human.
+4. Provide relevant context from the PDF.
 """
 
     # Retrieve context
     retrieved_context = retrieve_context(user_query)
     combined_context = f"Context from PDF: {retrieved_context}"
 
-    # Build the conversation messages
+    # Prepare messages
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=f"{combined_context}\n\nQuestion: {user_query}")
     ]
-
-    # Add memory from previous user/assistant turns
+    # Add memory from previous conversation
     messages = memory.chat_memory.messages + messages
 
     try:
         response = chat.invoke(messages)
         return response.content
     except Exception as e:
-        return f"⚠ Error: {str(e)}"
+        return f"⚠️ Error: {str(e)}"
 
 # ----------------------------------------------------------------------
 # ✅ Streamlit UI
 # ----------------------------------------------------------------------
-st.set_page_config(page_title="Nandesh AI Chatbot", layout="wide")
-st.title("🤖 Nandesh AI Chatbot")
+st.set_page_config(page_title="AI Chatbot", layout="wide")
+st.title("🤖 Ritesh / Nandesh AI Chatbot")
 
-# 1. If PDF exists, load & upsert into Chroma (only once)
+# 1. If not already done, load & upsert PDF to Chroma
 if "db_initialized" not in st.session_state:
     st.session_state["db_initialized"] = False
 
@@ -141,7 +141,7 @@ if not st.session_state["db_initialized"]:
         else:
             st.warning("⚠ No text found in the PDF!")
     else:
-        st.warning(f"⚠ PDF file not found at: {PDF_FILE_PATH}")
+        st.warning(f"⚠ PDF file not found: {PDF_FILE_PATH}")
     st.session_state["db_initialized"] = True
 
 # 2. Display conversation so far
@@ -152,7 +152,7 @@ for msg in memory.chat_memory.messages:
         st.chat_message("assistant").write(msg.content)
 
 # 3. Chat input
-user_input = st.chat_input("Ask me anything about Nandesh...")
+user_input = st.chat_input("Ask me anything...")
 
 if user_input:
     # Add user message to memory
@@ -163,20 +163,3 @@ if user_input:
     ai_response = query_llama3(user_input)
     memory.chat_memory.add_ai_message(ai_response)
     st.chat_message("assistant").write(ai_response)
-
----
-### **Usage Notes**
-1. **Place** your PDF in the same folder as `app.py` with the name `resume.pdf` or update `PDF_FILE_PATH`.
-2. **Deploy** on Streamlit Cloud with:
-   - A **`requirements.txt`** as shown above
-   - A **`runtime.txt`** with `python-3.10`
-3. **In-memory DB** means your embeddings won't persist across restarts.
-
----
-
-### **Optional: Make ChromaDB Persistent**
-If you prefer a **persistent** local DB, set `persist_directory="chroma_db_4"` in the `Settings`, but be aware that on **Streamlit Cloud**, local writes may not persist across sessions.
-
----
-
-Now you have a minimal `app.py` plus a pinned `requirements.txt` and a `runtime.txt` for Python 3.10. This setup should fix the **ChromaDB** import error and allow you to deploy on **Streamlit Cloud** successfully!
